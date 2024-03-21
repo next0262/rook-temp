@@ -99,5 +99,32 @@ func add(opManagerContext context.Context, mgr manager.Manager, r reconcile.Reco
 }
 
 func (r *ReconcileNvmeOfOSD) Reconcile(context context.Context, request reconcile.Request) (reconcile.Result, error) {
-	return reporting.ReportReconcileResult(logger, r.recorder, request, nil, reconcile.Result{}, nil)
+	// workaround because the rook logging mechanism is not compatible with the controller-runtime logging interface
+	reconcileResponse, err := r.reconcile(request)
+	return reconcileResponse, err
+}
+
+func (r *ReconcileNvmeOfOSD) reconcile(request reconcile.Request) (reconcile.Result, error) {
+	logger.Debug("reconciling NvmeOfOSD", "Request.Namespace", request.Namespace, "Request.Name", request.Name)
+
+	// Fetch the NvmeOfOSD CRD object
+	nvmeOfOSD, err := r.fetchNvmeOfOSD(request)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	// Placeholder for status handling
+	// TODO (cheolho.kang): Need to implement handler
+	return reporting.ReportReconcileResult(logger, r.recorder, request, nvmeOfOSD, reconcile.Result{}, err)
+}
+
+// fetchNvmeOfOSD retrieves the NvmeOfOSD instance by name and namespace.
+func (r *ReconcileNvmeOfOSD) fetchNvmeOfOSD(request reconcile.Request) (*cephv1.NvmeOfOSD, error) {
+	nvmeOfOSD := &cephv1.NvmeOfOSD{}
+	err := r.client.Get(r.opManagerContext, request.NamespacedName, nvmeOfOSD)
+	if err != nil {
+		logger.Error(err, "unable to fetch NvmeOfOSD", "Request.Namespace", request.Namespace, "Request.Name", request.Name)
+		return nil, err
+	}
+	return nvmeOfOSD, nil
 }
