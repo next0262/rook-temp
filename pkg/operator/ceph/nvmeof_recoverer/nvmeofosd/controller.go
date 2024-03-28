@@ -27,6 +27,7 @@ import (
 	cephv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	"github.com/rook/rook/pkg/clusterd"
 	opcontroller "github.com/rook/rook/pkg/operator/ceph/controller"
+	"github.com/rook/rook/pkg/operator/ceph/nvmeof_recoverer/cluster_manager"
 	"github.com/rook/rook/pkg/operator/ceph/reporting"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -62,6 +63,7 @@ type ReconcileNvmeOfOSD struct {
 	context          *clusterd.Context
 	opManagerContext context.Context
 	recorder         record.EventRecorder
+	clusterManager   *cluster_manager.ClusterManager
 }
 
 // Add creates a new NvmeOfOSD Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -78,6 +80,7 @@ func newReconciler(mgr manager.Manager, context *clusterd.Context, opManagerCont
 		context:          context,
 		opManagerContext: opManagerContext,
 		recorder:         mgr.GetEventRecorderFor("rook-" + controllerName),
+		clusterManager:   cluster_manager.GetInstance(),
 	}
 }
 
@@ -133,11 +136,28 @@ func (r *ReconcileNvmeOfOSD) fetchNvmeOfOSD(request reconcile.Request) (*cephv1.
 func (r *ReconcileNvmeOfOSD) handleNvmeOfOSDStatus(nvmeOfOSD *cephv1.NvmeOfOSD) (reconcile.Result, error) {
 	switch nvmeOfOSD.Status.Status {
 	case "failed":
-		// Placeholder for failed status handling
+		err := r.clusterManager.ReassignFailedNode(nvmeOfOSD)
+		if err != nil {
+			logger.Error(err, "failed to reassign node for NvmeOfOSD", "NvmeOfOSD", nvmeOfOSD.Name)
+			return reconcile.Result{}, err
+		}
+
+		// Update the NvmeOfOSD status
+		r.updateCR(nvmeOfOSD)
+		logger.Info("successfully reassigned node for NvmeOfOSD. nextNode: %s, attachedDevice: %s", nvmeOfOSD.Spec.AttachNode, nvmeOfOSD.Spec.Device)
 	default:
 		// Handle other statuses or do nothing
 		logger.Debug("This NvmeOfOSD status does not need to action", "Status", nvmeOfOSD.Status.Status)
 		return reconcile.Result{}, nil
 	}
 	return reconcile.Result{}, nil
+}
+
+// updateCR updates a NvmeOfOSD CR with the given status and spec.
+func (r *ReconcileNvmeOfOSD) updateCR(nvmeOfOSD *cephv1.NvmeOfOSD) {
+	if err := reporting.UpdateStatus(r.client, nvmeOfOSD); err != nil {
+		logger.Warningf("failed to update nvmeOfOSD %q. %v", nvmeOfOSD.Name, err)
+		return
+	}
+	logger.Debugf("nvmeOfOSD %q updated successfully", nvmeOfOSD)
 }
