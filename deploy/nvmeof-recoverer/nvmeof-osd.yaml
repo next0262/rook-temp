@@ -1,0 +1,12 @@
+apiVersion: ceph.rook.io/v1
+kind: NvmeOfOSD
+metadata:
+  name: example-nvmeofosd
+  namespace: rook-ceph
+spec:
+  nvmeOfStorageName: "storage1"
+  device: "/dev/nvme1n1"
+  vnode: "vnode1"
+  attachNode: "node1"
+status:
+  status: "Creating"

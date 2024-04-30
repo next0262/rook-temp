@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"emperror.dev/errors"
 	"github.com/coreos/pkg/capnslog"
 
 	cephv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
@@ -69,31 +70,34 @@ type ReconcileNvmeOfOSD struct {
 // Add creates a new NvmeOfOSD Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager, context *clusterd.Context, opManagerContext context.Context, opConfig opcontroller.OperatorConfig) error {
-	return add(opManagerContext, mgr, newReconciler(mgr, context, opManagerContext))
+	return add(mgr, newReconciler(mgr, context, opManagerContext))
 }
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, context *clusterd.Context, opManagerContext context.Context) reconcile.Reconciler {
 	return &ReconcileNvmeOfOSD{
 		client:           mgr.GetClient(),
-		scheme:           mgr.GetScheme(),
 		context:          context,
+		scheme:           mgr.GetScheme(),
 		opManagerContext: opManagerContext,
 		recorder:         mgr.GetEventRecorderFor("rook-" + controllerName),
 		clusterManager:   cluster_manager.GetInstance(),
 	}
 }
 
-func add(opManagerContext context.Context, mgr manager.Manager, r reconcile.Reconciler) error {
+func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
 	c, err := controller.New(controllerName, mgr, controller.Options{Reconciler: r})
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "failed to create %s controller", controllerName)
 	}
 	logger.Info("successfully started")
 
 	// Watch for changes on the NvmeOfOSD CRD object
-	err = c.Watch(source.Kind(mgr.GetCache(), &cephv1.NvmeOfOSD{TypeMeta: controllerTypeMeta}), &handler.EnqueueRequestForObject{}, opcontroller.WatchControllerPredicate())
+	cmKind := source.Kind(
+		mgr.GetCache(),
+		&cephv1.NvmeOfOSD{TypeMeta: controllerTypeMeta})
+	err = c.Watch(cmKind, &handler.EnqueueRequestForObject{}, opcontroller.WatchControllerPredicate())
 	if err != nil {
 		return err
 	}
@@ -159,5 +163,5 @@ func (r *ReconcileNvmeOfOSD) updateCR(nvmeOfOSD *cephv1.NvmeOfOSD) {
 		logger.Warningf("failed to update nvmeOfOSD %q. %v", nvmeOfOSD.Name, err)
 		return
 	}
-	logger.Debugf("nvmeOfOSD %q updated successfully", nvmeOfOSD)
+	logger.Debugf("nvmeOfOSD %q updated successfully", nvmeOfOSD.Name)
 }
