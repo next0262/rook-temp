@@ -30,9 +30,13 @@ spec:
     nodes:
       - name: "minikube"
         devices:
-          - name: "nvme0n1"
-          - name: "nvme1n1"
-          - name: "nvme2n1"
+          - name: "/dev/ubuntu-vg/lv-osd0"
+      - name: "minikube-virtual-0"
+        devices:
+          - name: "/dev/ubuntu-vg/lv-osd1"
+      - name: "minikube-virtual-2"
+        devices:
+          - name: "/dev/ubuntu-vg/lv-osd2"
   monitoring:
     enabled: false
   healthCheck:

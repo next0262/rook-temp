@@ -727,6 +727,9 @@ func (c *Cluster) makeDeployment(osdProps osdProperties, osd OSDInfo, provisionC
 		if err := applyTopologyAffinity(&deployment.Spec.Template.Spec, osd); err != nil {
 			return nil, err
 		}
+	} else if osdProps.onVirtual() {
+		// virtual OSDs must have affinity to the node where the osd prepare job was executed
+		deployment.Spec.Template.Spec.NodeSelector = map[string]string{v1.LabelHostname: osdProps.physicalHostName}
 	} else {
 		deployment.Spec.Template.Spec.NodeSelector = map[string]string{v1.LabelHostname: osdProps.crushHostname}
 	}

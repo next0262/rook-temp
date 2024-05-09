@@ -132,6 +132,8 @@ type OrchestrationStatus struct {
 
 type osdProperties struct {
 	//crushHostname refers to the hostname or PVC name when the OSD is provisioned on Nodes or PVC block device, respectively.
+	nodeName            string
+	physicalHostName    string
 	crushHostname       string
 	devices             []cephv1.Device
 	pvc                 corev1.PersistentVolumeClaimVolumeSource
@@ -150,6 +152,15 @@ type osdProperties struct {
 	schedulerName       string
 	encrypted           bool
 	deviceSetName       string
+}
+
+func (osdProps osdProperties) onVirtual() bool {
+	logger.Debugf("!!start to check if this device is on fabric. %+v", osdProps.devices)
+	if strings.Contains(osdProps.nodeName, "virtual") {
+		logger.Debugf("!!this node is on fabric. %s", osdProps.nodeName)
+		return true
+	}
+	return false
 }
 
 func (osdProps osdProperties) onPVC() bool {

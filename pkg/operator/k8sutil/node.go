@@ -22,8 +22,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sigs.k8s.io/yaml"
 	"strings"
+
+	"sigs.k8s.io/yaml"
 
 	cephv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	v1 "k8s.io/api/core/v1"
@@ -90,6 +91,14 @@ func GetValidNodes(ctx context.Context, rookStorage cephv1.StorageScopeSpec, cli
 	}
 
 	return RookNodesMatchingKubernetesNodes(rookStorage, validK8sNodes)
+}
+
+func GetNodes(rookStorage cephv1.StorageScopeSpec) []cephv1.Node {
+	nodes := []cephv1.Node{}
+	for _, rn := range rookStorage.Nodes {
+		nodes = append(nodes, rn)
+	}
+	return nodes
 }
 
 // GetNodeNameFromHostname returns the name of the node resource looked up by the hostname label

@@ -285,7 +285,7 @@ func (c *Cluster) startProvisioningOverNodes(config *provisionConfig, errs *prov
 		logger.Debugf("storage nodes: %+v", c.spec.Storage.Nodes)
 	}
 	// generally speaking, this finds nodes which are capable of running new osds
-	validNodes := k8sutil.GetValidNodes(c.clusterInfo.Context, c.spec.Storage, c.context.Clientset, cephv1.GetOSDPlacement(c.spec.Placement))
+	validNodes := k8sutil.GetNodes(c.spec.Storage) //remove node validation
 
 	logger.Infof("%d of the %d storage nodes are valid", len(validNodes), len(c.spec.Storage.Nodes))
 
@@ -325,12 +325,18 @@ func (c *Cluster) startProvisioningOverNodes(config *provisionConfig, errs *prov
 		storeConfig := osdconfig.ToStoreConfig(n.Config)
 		metadataDevice := osdconfig.MetadataDevice(n.Config)
 		osdProps := osdProperties{
+			nodeName:       n.Name,
 			crushHostname:  n.Name,
 			devices:        n.Devices,
 			selection:      n.Selection,
 			resources:      n.Resources,
 			storeConfig:    storeConfig,
 			metadataDevice: metadataDevice,
+		}
+
+		if osdProps.onVirtual() {
+			osdProps.physicalHostName = strings.Split(n.Name, "-")[0]
+			osdProps.crushHostname = "virtual"
 		}
 
 		// update the orchestration status of this node to the starting state
