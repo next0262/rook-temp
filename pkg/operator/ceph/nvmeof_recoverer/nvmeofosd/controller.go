@@ -20,19 +20,16 @@ package nvmeofosd
 import (
 	"context"
 	"fmt"
-	"reflect"
 
 	"emperror.dev/errors"
 	"github.com/coreos/pkg/capnslog"
 
-	cephv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	"github.com/rook/rook/pkg/clusterd"
 	opcontroller "github.com/rook/rook/pkg/operator/ceph/controller"
 	"github.com/rook/rook/pkg/operator/ceph/nvmeof_recoverer/device_manager"
 	"github.com/rook/rook/pkg/operator/ceph/reporting"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -48,14 +45,6 @@ const (
 )
 
 var logger = capnslog.NewPackageLogger("github.com/rook/rook", controllerName)
-
-var podKind = reflect.TypeOf(corev1.Pod{}).Name()
-
-// Sets the type meta for the controller main object
-var controllerTypeMeta = metav1.TypeMeta{
-	Kind:       podKind,
-	APIVersion: fmt.Sprintf("%s/%s", cephv1.CustomResourceGroup, cephv1.Version),
-}
 
 var _ reconcile.Reconciler = &ReconcileNvmeOfOSD{}
 
@@ -98,7 +87,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Watch for changes on the NvmeOfOSD CRD object
 	cmKind := source.Kind(
 		mgr.GetCache(),
-		&corev1.Pod{TypeMeta: controllerTypeMeta})
+		&corev1.Pod{})
 
 	err = c.Watch(cmKind, handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &appsv1.Deployment{}, handler.OnlyControllerOwner()), opcontroller.WatchControllerPredicate())
 	if err != nil {
