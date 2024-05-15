@@ -464,7 +464,40 @@ func WatchControllerPredicate() predicate.Funcs {
 					return true
 				}
 
+			case *appsv1.Deployment:
+				objNew := e.ObjectNew.(*appsv1.Deployment)
+				namespacedName := fmt.Sprintf("%s/%s", objNew.Namespace, objNew.Name)
+				logger.Debug("update event on Deployment %q", namespacedName)
+				// If the labels "do_not_reconcile" is set on the object, let's not reconcile that request
+				IsDoNotReconcile := IsDoNotReconcile(objNew.GetLabels())
+				if IsDoNotReconcile {
+					logger.Debugf("object %q matched on update but %q label is set, doing nothing",
+						namespacedName, DoNotReconcileLabelName)
+					return false
+				}
+				statusDiff := cmp.Diff(objOld.Status, objNew.Status)
+				if statusDiff != "" {
+					logger.Infof("Deployment Status has changed for %q. diff=%s", namespacedName, statusDiff)
+					return true
+				}
+				specDiff := cmp.Diff(objOld.Spec, objNew.Spec)
+				if specDiff != "" {
+					logger.Infof("Deployment Spec has changed for %q. diff=%s", namespacedName, specDiff)
+					return true
+				} else if objectToBeDeleted(objOld, objNew) {
+					logger.Debugf("Deployment %q is going be deleted", namespacedName)
+					return true
+				} else if objOld.GetGeneration() != objNew.GetGeneration() {
+					logger.Debugf("skipping Deployment resource %q update with unchanged spec", namespacedName)
+				}
+				// Handling upgrades
+				isUpgrade := isUpgrade(objOld.GetLabels(), objNew.GetLabels())
+				if isUpgrade {
+					return true
+				}
+
 			}
+
 			return false
 		},
 		GenericFunc: func(e event.GenericEvent) bool {
