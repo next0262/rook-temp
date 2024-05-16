@@ -601,6 +601,7 @@ func WatchPredicateForNonCRDObject(owner runtime.Object, scheme *runtime.Scheme)
 				logger.Errorf("failed to check if object matched. %v", err)
 			}
 			objectName := object.GetName()
+			logger.Debugf("wjkim : objectName : %s", objectName)
 			if match {
 				// If the labels "do_not_reconcile" is set on the object, let's not reconcile that request
 				IsDoNotReconcile := IsDoNotReconcile(object.GetLabels())
@@ -638,7 +639,7 @@ func WatchPredicateForNonCRDObject(owner runtime.Object, scheme *runtime.Scheme)
 				_, ok = e.ObjectNew.(*appsv1.Deployment)
 				if ok {
 					logger.Debug("do not reconcile deployments updates")
-					return false
+					return true
 				}
 
 				// did the object change?
