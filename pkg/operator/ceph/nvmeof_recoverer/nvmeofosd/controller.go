@@ -20,6 +20,7 @@ package nvmeofosd
 import (
 	"context"
 	"fmt"
+	"reflect"
 
 	"emperror.dev/errors"
 	"github.com/coreos/pkg/capnslog"
@@ -30,6 +31,7 @@ import (
 	"github.com/rook/rook/pkg/operator/ceph/reporting"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -45,6 +47,17 @@ const (
 )
 
 var logger = capnslog.NewPackageLogger("github.com/rook/rook", controllerName)
+
+// List of object resources to watch by the controller
+
+var objectsToWatch = []client.Object{
+	&corev1.Pod{TypeMeta: metav1.TypeMeta{Kind: "Pod", APIVersion: corev1.SchemeGroupVersion.String()}},
+}
+
+var deploymentKind = reflect.TypeOf(appsv1.Deployment{}).Name()
+
+// Sets the type meta for the controller main object
+var controllerTypeMeta = metav1.TypeMeta{Kind: deploymentKind, APIVersion: appsv1.SchemeGroupVersion.String()}
 
 var _ reconcile.Reconciler = &ReconcileNvmeOfOSD{}
 
@@ -87,11 +100,25 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Watch for changes on the NvmeOfOSD CRD object
 	cmKind := source.Kind(
 		mgr.GetCache(),
-		&corev1.Pod{})
+		&appsv1.Deployment{TypeMeta: controllerTypeMeta})
 
-	err = c.Watch(cmKind, handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &appsv1.Deployment{}, handler.OnlyControllerOwner()), opcontroller.WatchControllerPredicate())
+	err = c.Watch(cmKind, &handler.EnqueueRequestForObject{}, opcontroller.WatchControllerPredicate())
 	if err != nil {
 		return err
+	}
+
+	// Watch all other resources
+	for _, t := range objectsToWatch {
+		ownerRequest := handler.EnqueueRequestForOwner(
+			mgr.GetScheme(),
+			mgr.GetRESTMapper(),
+			&appsv1.Deployment{},
+		)
+		err = c.Watch(source.Kind(mgr.GetCache(), t), ownerRequest,
+			opcontroller.WatchPredicateForNonCRDObject(&appsv1.Deployment{TypeMeta: controllerTypeMeta}, mgr.GetScheme()))
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
