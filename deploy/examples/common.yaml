@@ -84,17 +84,7 @@ metadata:
     app.kubernetes.io/name: cosi-driver-ceph
 rules:
   - apiGroups: ["objectstorage.k8s.io"]
-    resources:
-      [
-        "buckets",
-        "bucketaccesses",
-        "bucketclaims",
-        "bucketaccessclasses",
-        "buckets/status",
-        "bucketaccesses/status",
-        "bucketclaims/status",
-        "bucketaccessclasses/status",
-      ]
+    resources: ["buckets", "bucketaccesses", "bucketclaims", "bucketaccessclasses", "buckets/status", "bucketaccesses/status", "bucketclaims/status", "bucketaccessclasses/status"]
     verbs: ["get", "list", "watch", "update", "create", "delete"]
   - apiGroups: ["coordination.k8s.io"]
     resources: ["leases"]
@@ -594,8 +584,7 @@ rules:
     verbs: ["create"]
   - apiGroups: ["csiaddons.openshift.io"]
     resources: ["networkfences"]
-    verbs:
-      ["create", "get", "update", "delete", "watch", "list", "deletecollection"]
+    verbs: ["create", "get", "update", "delete", "watch", "list", "deletecollection"]
   - apiGroups: ["apiextensions.k8s.io"]
     resources: ["customresourcedefinitions"]
     verbs: ["get"]
@@ -872,7 +861,7 @@ rules:
       - patch
       - delete
   - apiGroups:
-      - ""
+      - ''
     resources:
       - persistentvolumeclaims
     verbs:

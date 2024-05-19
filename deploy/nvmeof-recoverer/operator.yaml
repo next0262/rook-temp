@@ -591,7 +591,7 @@ spec:
       serviceAccountName: rook-ceph-system
       containers:
         - name: rook-ceph-operator
-          image: build-f38aa6f6/ceph-amd64:latest
+          image: build-90b200cf/ceph-amd64:latest
           imagePullPolicy: IfNotPresent
           args: ["ceph", "operator"]
           securityContext:
