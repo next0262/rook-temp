@@ -7,7 +7,8 @@ import (
 	"github.com/coreos/pkg/capnslog"
 
 	"github.com/go-logr/logr"
-	appsv1 "k8s.io/api/apps/v1"
+	cephv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
+	corev1 "k8s.io/api/core/v1"
 )
 
 const (
@@ -30,21 +31,31 @@ func GetInstance() *DeviceManager {
 	return instance
 }
 
-// ReassignFailedNode finds the next available node for a device and updates the mapping.
-func (dm *DeviceManager) FailingNvmeOfStorage(dp *appsv1.Deployment) error {
+func (dm *DeviceManager) FailingNvmeOfStorage(pod *corev1.Pod, nvmeOfStorages []cephv1.NvmeOfStorage) error {
 
-	attachedNode, devicePath, err := dm.getAttachedNodeandDevicePath(dp)
+	attachedNode, devicePath, err := dm.getAttachedNodeandDevicePath(pod)
 	if err != nil {
 		return err
 	}
 
-	return fmt.Errorf("fail to fail NvmeOfStorage about attachedNode %s and devicePath %s", attachedNode, devicePath)
+	for _, nvmeOfStorage := range nvmeOfStorages {
+		for _, device := range nvmeOfStorage.Spec.Devices {
+			if device.AttachedNode == attachedNode && device.DeviceName == devicePath {
+				nvmeOfStorage.Status.Status = "Failed"
+				logger.Infof("Updated NvmeOfStorage status for node %s and device %s", attachedNode, devicePath)
+				return nil
+			}
+		}
+	}
+
+	return fmt.Errorf("failed to update NvmeOfStorage for attachedNode %s and devicePath %s", attachedNode, devicePath)
+
 }
 
-func (dm *DeviceManager) getAttachedNodeandDevicePath(dp *appsv1.Deployment) (string, string, error) {
+func (dm *DeviceManager) getAttachedNodeandDevicePath(pod *corev1.Pod) (string, string, error) {
 	var attachedNode, devicePath string
 
-	for _, container := range dp.Spec.Template.Spec.Containers {
+	for _, container := range pod.Spec.Containers {
 		for _, env := range container.Env {
 			if env.Name == "ROOK_NODE_NAME" {
 				logger.Infof("attached node : %s", env.Value)
@@ -52,7 +63,7 @@ func (dm *DeviceManager) getAttachedNodeandDevicePath(dp *appsv1.Deployment) (st
 			}
 
 			if env.Name == "ROOK_BLOCK_PATH" {
-				logger.Infof("attached node : %s", env.Value)
+				logger.Infof("block path : %s", env.Value)
 				devicePath = env.Value
 			}
 		}

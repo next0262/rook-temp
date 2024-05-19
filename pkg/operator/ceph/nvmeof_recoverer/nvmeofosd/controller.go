@@ -19,12 +19,12 @@ package nvmeofosd
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 
 	"emperror.dev/errors"
 	"github.com/coreos/pkg/capnslog"
 
+	cephv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	"github.com/rook/rook/pkg/clusterd"
 	opcontroller "github.com/rook/rook/pkg/operator/ceph/controller"
 	"github.com/rook/rook/pkg/operator/ceph/nvmeof_recoverer/device_manager"
@@ -48,16 +48,10 @@ const (
 
 var logger = capnslog.NewPackageLogger("github.com/rook/rook", controllerName)
 
-// List of object resources to watch by the controller
-
-var objectsToWatch = []client.Object{
-	&corev1.Pod{TypeMeta: metav1.TypeMeta{Kind: "Pod", APIVersion: corev1.SchemeGroupVersion.String()}},
-}
-
-var deploymentKind = reflect.TypeOf(appsv1.Deployment{}).Name()
+var podKind = reflect.TypeOf(corev1.Pod{}).Name()
 
 // Sets the type meta for the controller main object
-var controllerTypeMeta = metav1.TypeMeta{Kind: deploymentKind, APIVersion: appsv1.SchemeGroupVersion.String()}
+var controllerTypeMeta = metav1.TypeMeta{Kind: podKind, APIVersion: appsv1.SchemeGroupVersion.String()}
 
 var _ reconcile.Reconciler = &ReconcileNvmeOfOSD{}
 
@@ -100,25 +94,11 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Watch for changes on the NvmeOfOSD CRD object
 	cmKind := source.Kind(
 		mgr.GetCache(),
-		&appsv1.Deployment{TypeMeta: controllerTypeMeta})
+		&corev1.Pod{TypeMeta: controllerTypeMeta})
 
 	err = c.Watch(cmKind, &handler.EnqueueRequestForObject{}, opcontroller.WatchControllerPredicate())
 	if err != nil {
 		return err
-	}
-
-	// Watch all other resources
-	for _, t := range objectsToWatch {
-		ownerRequest := handler.EnqueueRequestForOwner(
-			mgr.GetScheme(),
-			mgr.GetRESTMapper(),
-			&appsv1.Deployment{},
-		)
-		err = c.Watch(source.Kind(mgr.GetCache(), t), ownerRequest,
-			opcontroller.WatchPredicateForNonCRDObject(&appsv1.Deployment{TypeMeta: controllerTypeMeta}, mgr.GetScheme()))
-		if err != nil {
-			return err
-		}
 	}
 
 	return nil
@@ -133,51 +113,62 @@ func (r *ReconcileNvmeOfOSD) reconcile(request reconcile.Request) (reconcile.Res
 	logger.Debugf("reconciling NvmeOfOSD. Request.Namespace: %s, Request.Name: %s", request.Namespace, request.Name)
 
 	// Fetch the NvmeOfOSD CRD object
-	dp, pods, err := r.fetchNvmeOfOSD(request)
+	pod, err := r.fetchNvmeOfOSD(request)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
 
+	nvmeOfStorages, err := r.fetchNvmeOfStorageList()
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	logger.Infof("Found %d NvmeOfStorage resources in namespace %s", len(nvmeOfStorages), request.Namespace)
+
 	// Handle the NvmeOfOSD based on status
-	result, err := r.handleNvmeOfOSDStatus(dp, pods)
+	result, err := r.handleNvmeOfOSDStatus(pod, nvmeOfStorages)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
 
 	// Placeholder for updating the crush map
 	// TODO (cheolho.kang): Need to implement handler
-	return reporting.ReportReconcileResult(logger, r.recorder, request, dp, result, err)
+	return reporting.ReportReconcileResult(logger, r.recorder, request, pod, result, err)
 }
 
 // fetchNvmeOfOSD retrieves the NvmeOfOSD instance by name and namespace.
-func (r *ReconcileNvmeOfOSD) fetchNvmeOfOSD(request reconcile.Request) (*appsv1.Deployment, *corev1.PodList, error) {
-	dp := &appsv1.Deployment{}
-	err := r.client.Get(r.opManagerContext, request.NamespacedName, dp)
+func (r *ReconcileNvmeOfOSD) fetchNvmeOfOSD(request reconcile.Request) (*corev1.Pod, error) {
+	pod := &corev1.Pod{}
+	err := r.client.Get(r.opManagerContext, request.NamespacedName, pod)
 	if err != nil {
-		logger.Errorf("unable to fetch Deployment, %v", err)
-		return nil, nil, err
+		logger.Errorf("`unable to fetch Pod`, %v", err)
+		return nil, err
 	}
 
-	pods := &corev1.PodList{}
-	err = r.client.List(r.opManagerContext, pods, client.InNamespace(request.Namespace), client.MatchingLabels(dp.Spec.Template.Labels))
-	if err != nil {
-		logger.Errorf("unable to fetch Pods of Deployment, %v", err)
-		return nil, nil, err
-	}
-
-	return dp, pods, nil
+	return pod, nil
 }
 
-func (r *ReconcileNvmeOfOSD) handleNvmeOfOSDStatus(dp *appsv1.Deployment, pods *corev1.PodList) (reconcile.Result, error) {
-	if len(pods.Items) == 0 {
-		// If there are no pods, return with an error
-		return reconcile.Result{}, fmt.Errorf("no pods found for deployment %s", dp.Name)
+// fetchNvmeOfOSD retrieves the NvmeOfOSD instance by name and namespace.
+func (r *ReconcileNvmeOfOSD) fetchNvmeOfStorageList() ([]cephv1.NvmeOfStorage, error) {
+	nvmeOfStorageList := &cephv1.NvmeOfStorageList{}
+	err := r.client.List(r.opManagerContext, nvmeOfStorageList)
+	if err != nil {
+		logger.Errorf("unable to fetch NvmeOfStorage, %v", err)
+		return nil, err
 	}
+	return nvmeOfStorageList.Items, nil
+}
 
-	pod := &pods.Items[0]
+func (r *ReconcileNvmeOfOSD) handleNvmeOfOSDStatus(pod *corev1.Pod, nvmeOfStorages []cephv1.NvmeOfStorage) (reconcile.Result, error) {
+
 	switch pod.Status.Phase {
 	// Placeholder for future status handling
 	// TODO (cheolho.kang): Implement the logic to handle the NvmeOfOSD status
 	case corev1.PodFailed:
 		logger.Debugf("status changed to %s", pod.Status.Phase)
-		r.deviceManager.FailingNvmeOfStorage(dp)
+		err := r.deviceManager.FailingNvmeOfStorage(pod, nvmeOfStorages)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
 		return reconcile.Result{}, nil
 	default:
 		// Handle other statuses or do nothing
